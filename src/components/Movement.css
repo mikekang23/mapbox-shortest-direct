@@ -1,0 +1,42 @@
+.movement {
+  width: auto;
+  height: 70px;
+  position: absolute;
+  left: 20px;
+  top: 40px;
+  z-index: 100000000000;
+  border-radius: 10px;
+  border: 1px solid #ccc;
+  display: flex;
+  align-items: center;
+  justify-content: left;
+  font: 'Raleway', sans-serif;
+  font-size: 18px;
+  font-weight: 300;
+  padding-left: 20px;
+  padding-right: 20px;
+  color:white;
+  background: #0080ff;
+}
+.movement:hover {
+  cursor: pointer;
+  background-color: #2d95fc;
+}
+
+.movement:active {
+  background-color: #127DE8;
+}
+
+.movement:focus {
+  outline: none;
+}
+
+@media screen and (max-width: 600px){
+  .movement {
+    height: 60px;
+    font-size:16px;
+    padding-left: 15px;
+    padding-right: 15px;
+    width: auto;
+  }
+}

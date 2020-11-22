@@ -1,14 +1,13 @@
 import React, { Component, Fragment } from "react";
 import ReactMapGL, {Marker, Source, Layer} from "react-map-gl";
 import Pin from "./ui/pin";
+import BusDemand from './components/BusDemand';
+import Movement from './components/Movement';
 import axios from "axios";
-import {dataLayer} from "./ui/map-styles";
-import {geojson} from "./geojson";
-//Mapbox public key would be put into .env file in a production setting with git ignoring it
-const MAPBOX_TOKEN = "pk.eyJ1IjoibWlrZWthbmcyMyIsImEiOiJja2hycnJlNzgwMmt0MnNtYWx0bXo1bDllIn0.Bt3qHj6Oj6ZwU1t-N1ZqQw";
+import {getShortestStops} from './logic/getShortestStops';
+import {newPositionAfterWandering} from './logic/wanderingMovement';
 
 class App extends Component{
-
   state = {
     viewport: {
       width: "100vw",
@@ -19,130 +18,182 @@ class App extends Component{
     },
     passengers: [],
     stops: [],
-    shortestPtoS: []
+    shortestPtoS: [],
+    hoveredPinIndex: null,
+    numOfPeopleClosestToStop: 0,
+    moving: false
   };
 
+
   componentDidMount() {
-
-    let getPassengers = () => {
-      return axios.get("/passengers.json")
-        .then((res) => {
-          this.setState({
-            passengers: res.data
-          });
-        })
-        .catch((err) => {
-          console.log(err);
-        });
-    }
-
-    let getStops = () => {
-      return axios.get("/stops.json")
-        .then((res) => {
-          this.setState({
-            stops: res.data
-          });
-        })
-        .catch((err) => {
-          console.log(err);
-        });
-    }
-
-    Promise.all([getPassengers(), getStops()])
+    Promise.all([this.getPassengers(), this.getStops()])
       .then(() => {
         this.setState({
           shortestPtoS: this.getShortest()
         })
-        console.log(this.state.shortestPtoS);
       })
+  }
 
+  getPassengers = () => {
+    return axios.get("/passengers.json")
+      .then((res) => {
+        this.setState({
+          passengers: res.data
+        });
+      })
+      .catch((err) => {
+        console.log(err);
+      });
+  }
+
+  getStops = () => {
+    return axios.get("/stops.json")
+      .then((res) => {
+        this.setState({
+          stops: res.data
+        });
+      })
+      .catch((err) => {
+        console.log(err);
+      });
+  }
+
+  setShown = (index, val) => {
+    if(val){
+      this.setState({
+        hoveredPinIndex: index
+      }, () => {
+        if(this.state.hoveredPinIndex){
+          const count = this.state.shortestPtoS.filter((item) => {
+            return item.stop.index === index
+          });
+          this.setState({
+            numOfPeopleClosestToStop: count.length
+          })
+        }
+      })
+    }else{
+      this.setState({
+        hoveredPinIndex: null
+      })
+    }
   }
 
   getShortest = () => {
     let passengers = this.state.passengers;
     let stops = this.state.stops;
-    let indexesOfShortestStops = [];
-    for(let i = 0; i < passengers.length; i++){
-      let closest = { index:0, distance:0 };
-      for(let j = 0; j < stops.length; j++){
-        let distance = this.getHaversineDistance(passengers[i], stops[j]);
-        if(j === 0){
-          closest = {index:0, distance: distance, lat: stops[j].lat, lon: stops[j].lon}
-        } else if (closest.distance > distance) {
-          closest = {index:j, distance: distance, lat: stops[j].lat, lon: stops[j].lon}
-        }
-      }
-      indexesOfShortestStops.push({
-        passenger: {index: i, lat: passengers[i].lat, lon: passengers[i].lon},
-        stop: {index: closest.index, lat: closest.lat, lon: closest.lon}
-      });
-    }
+    let indexesOfShortestStops = getShortestStops(passengers, stops);
     return indexesOfShortestStops;
   }
 
-  getHaversineDistance = (passengers, stops) => {
-    let {lat:lat1, lon:lon1} = passengers;
-    let {lat:lat2, lon:lon2} = stops;
-    let R = 6371; // Radius of the earth in km
-    let dLat = this.deg2rad(lat2-lat1);  // deg2rad below
-    let dLon = this.deg2rad(lon2-lon1);
-    let a =
-      Math.sin(dLat/2) * Math.sin(dLat/2) +
-      Math.cos(this.deg2rad(lat1)) * Math.cos(this.deg2rad(lat2)) *
-      Math.sin(dLon/2) * Math.sin(dLon/2)
-      ;
-    let c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
-    let d = R * c; // Distance in km
-    return d;
-  }
+  movePassengers = () => {
+    let startTime = new Date().getTime();
+    const interval = setInterval(() => {
+      if(new Date().getTime() - startTime > 12000){
+        clearInterval(interval)
+        return;
+      }
 
-  deg2rad = (deg) => {
-    return deg * (Math.PI/180)
+      let newPositions = newPositionAfterWandering(this.state.passengers, startTime);
+
+      this.setState({
+        passengers: newPositions
+      }, () => {
+        const updateShorted = this.getShortest()
+        this.setState({
+          shortestPtoS: updateShorted
+        }, () => {
+          if(this.state.hoveredPinIndex){
+            this.setShown(this.state.hoveredPinIndex, true);
+          }
+        })
+      });
+    }, 100);
   }
 
   render() {
     return (
       <Fragment>
+        <Movement startMoving={() => this.movePassengers()}/>
+        {this.state.hoveredPinIndex ? <BusDemand count={this.state.numOfPeopleClosestToStop}/> : ''}
+
         <ReactMapGL
           {...this.state.viewport}
           onViewportChange={(viewport) => this.setState({viewport})}
-          mapboxApiAccessToken={MAPBOX_TOKEN}
+          mapboxApiAccessToken={process.env.REACT_APP_MAPBOX_API_KEY}
         >
           {
             this.state.passengers.map((passenger) => {
               return (
                 <Marker
-                  key={passenger.lon.toString() + passenger.lat.toString()}
+                  key={"p-marker" + passenger.lon.toString() + passenger.lat.toString()}
                   longitude={passenger.lon}
                   latitude={passenger.lat}
                 >
-                  <Pin size={10} colour="red"/>
+                  <Pin
+                    key={"p-pin" + passenger.lon.toString() + passenger.lat.toString()}
+                    size={20}
+                    colour="red"
+                  />
                 </Marker>
               )
             })
           }
           {
-            this.state.stops.map((passenger) => {
+            this.state.stops.map((passenger, index) => {
               return (
                 <Marker
-                  key={passenger.lon.toString() + passenger.lat.toString()}
+                  key={"s-marker" +passenger.lon.toString() + passenger.lat.toString()}
                   longitude={passenger.lon}
                   latitude={passenger.lat}
                 >
-                  <Pin size={10} colour="blue"/>
+                  <Pin
+                    key={"s-pin" + passenger.lon.toString() + passenger.lat.toString()}
+                    size={20}
+                    colour="blue"
+                    pinHoverOver={() => this.setShown(index, true)}
+                    pinHoverLeave={() => this.setShown(index, false)}
+                  />
                 </Marker>
               )
             })
           }
 
-          <Source
-            id="routeLine"
-            type="geojson"
-            data={geojson}
-          />
-            <Layer
-              {...dataLayer}
-            />
+          {this.state.shortestPtoS.map((item,index) => {
+            return(
+              <Source
+                key={"source-"+index}
+                id={"routeLine" + index}
+                type="geojson"
+                data={{
+                  "type": "Feature",
+                  "geometry": {
+                    "type": "LineString",
+                    "coordinates": [
+                      [item.passenger.lon, item.passenger.lat],
+                      [item.stop.lon, item.stop.lat]
+                    ]
+                  },
+                  "properties": {}
+                }}
+              >
+                <Layer
+                  key={"layer-"+index}
+                  id={"layer"+index}
+                  type = "line"
+                  source = {"routeLine" + index}
+                  layout = {{
+                    "line-join": "round",
+                    "line-cap": "round"
+                  }}
+                  paint = {{
+                    "line-color": "rgba(80, 204, 107, 0.5)",
+                    "line-width": 5
+                  }}
+                />
+                </Source>
+              )
+            })}
         </ReactMapGL>
       </Fragment>
     );

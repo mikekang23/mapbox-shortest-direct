@@ -8,16 +8,32 @@ const ICON = `M20.2,15.7L20.2,15.7c1.1-1.6,1.8-3.6,1.8-5.7c0-5.6-4.5-10-10-10S2,
 export default class Pin extends PureComponent {
   pinStyle = {
     fill: this.props.colour,
-    stroke: 'none'
+    stroke: 'none',
+    marginLeft: '-10px',
+    marginTop: '-19px',
+    opacity: 0.7,
+    position:'absolute'
+  }
+
+  handleMouse = (val) => {
+    if(this.props.colour == 'blue'){
+      if(val == 'hover'){
+        this.props.pinHoverOver()
+      }else{
+        this.props.pinHoverLeave()
+      }
+    }
   }
 
   render() {
-    const {size = 20} = this.props;
+    const {size = 30} = this.props;
 
     return (
-      <svg height={size} viewBox="0 0 24 24" style={this.pinStyle}>
-        <path d={ICON} />
-      </svg>
+      <div onMouseOver={() => this.handleMouse('hover')} onMouseLeave={() => this.handleMouse('out')}>
+        <svg height={size} viewBox="0 0 24 24" style={this.pinStyle}>
+          <path d={ICON} />
+        </svg>
+      </div>
     );
   }
 }
