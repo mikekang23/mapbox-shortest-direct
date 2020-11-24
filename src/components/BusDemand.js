@@ -2,11 +2,6 @@ import React, { Component } from "react";
 import "./BusDemand.css";
 
 class BusDemand extends Component{
-
-  componentDidUpdate(){
-
-  }
-
   render(){
     return (
       <div className="demand">
